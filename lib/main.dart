@@ -42,7 +42,7 @@ class MapScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const seoulCityHall = NLatLng(37.5666, 126.979);
+    const busanSeomyeon = NLatLng(35.1579, 129.0597);
     final safeAreaPadding = MediaQuery.paddingOf(context);
 
     return Scaffold(
@@ -50,15 +50,15 @@ class MapScreen extends StatelessWidget {
         options: NaverMapViewOptions(
           contentPadding: safeAreaPadding,
           initialCameraPosition: NCameraPosition(
-            target: seoulCityHall,
+            target: busanSeomyeon,
             zoom: 14,
           ),
         ),
         onMapReady: (controller) {
           final marker = NMarker(
-            id: "city_hall",
-            position: seoulCityHall,
-            caption: NOverlayCaption(text: "서울시청"),
+            id: "seomyeon",
+            position: busanSeomyeon,
+            caption: NOverlayCaption(text: "부산 서면"),
           );
           controller.addOverlay(marker);
           print("naver map is ready!");
