@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:www.diningcode.com)",
+      "Bash(flutter pub get:*)"
+    ]
+  }
+}
