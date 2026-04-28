@@ -7,6 +7,8 @@ class Restaurant {
   final double latitude;
   final double longitude;
   final String? naverPlaceName;
+  final String? source;
+  final String? michelinGrade;
 
   Restaurant({
     required this.id,
@@ -17,6 +19,8 @@ class Restaurant {
     required this.latitude,
     required this.longitude,
     this.naverPlaceName,
+    this.source,
+    this.michelinGrade,
   });
 
   // Supabase 데이터를 Restaurant 객체로 변환
@@ -30,6 +34,8 @@ class Restaurant {
       latitude: (json['latitude'] as num).toDouble(),
       longitude: (json['longitude'] as num).toDouble(),
       naverPlaceName: json['naver_place_name'] as String?,
+      source: json['source'] as String?,
+      michelinGrade: json['michelin_grade'] as String?,
     );
   }
 }

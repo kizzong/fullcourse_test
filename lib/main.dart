@@ -58,11 +58,26 @@ class _MapScreenState extends State<MapScreen> {
   List<Map<String, dynamic>> restaurants = [];
   bool isLoading = true;
   NaverMapController? mapController;
+  String? selectedSource; // null = 전체, "michelin" = 미슐랭만
 
   @override
   void initState() {
     super.initState();
     _loadRestaurants();
+  }
+
+  // 필터링된 식당 목록
+  List<Map<String, dynamic>> get filteredRestaurants {
+    if (selectedSource == null) {
+      print('🔍 필터: 전체 (${restaurants.length}개)');
+      return restaurants; // 전체 보기
+    }
+    final filtered = restaurants.where((restaurant) {
+      final source = restaurant['source']?.toString() ?? '';
+      return source.contains(selectedSource!);
+    }).toList();
+    print('🔍 필터: "$selectedSource" (${filtered.length}개)');
+    return filtered;
   }
 
   // Supabase에서 식당 데이터 불러오기
@@ -77,9 +92,20 @@ class _MapScreenState extends State<MapScreen> {
       print('✅ 식당 데이터 로드 완료: ${restaurants.length}개');
       for (var restaurant in restaurants) {
         print(
-          '  - ${restaurant['name']} (${restaurant['latitude']}, ${restaurant['longitude']})',
+          '  - ${restaurant['name']} (source: "${restaurant['source']}")',
         );
       }
+
+      // source 값 통계
+      final sourceCount = <String, int>{};
+      for (var restaurant in restaurants) {
+        final source = restaurant['source']?.toString() ?? 'null';
+        sourceCount[source] = (sourceCount[source] ?? 0) + 1;
+      }
+      print('📊 Source 통계:');
+      sourceCount.forEach((source, count) {
+        print('  - "$source": $count개');
+      });
 
       // 데이터 로드 후 마커 추가
       _addMarkers();
@@ -103,8 +129,10 @@ class _MapScreenState extends State<MapScreen> {
       return;
     }
 
+    final restaurantsToShow = filteredRestaurants;
+
     print('📍 마커 추가 시작...');
-    for (var restaurant in restaurants) {
+    for (var restaurant in restaurantsToShow) {
       try {
         final marker = NMarker(
           id: restaurant['id'],
@@ -128,11 +156,68 @@ class _MapScreenState extends State<MapScreen> {
         print('  ❌ ${restaurant['name']} 마커 추가 실패: $e');
       }
     }
-    print('📍 총 ${restaurants.length}개 마커 추가 완료!');
+    print('📍 총 ${restaurantsToShow.length}개 마커 추가 완료!');
+  }
+
+  // 마커 새로고침 (필터 변경 시)
+  Future<void> _refreshMarkers() async {
+    if (mapController == null) return;
+
+    // 기존 마커 모두 제거
+    await mapController!.clearOverlays();
+
+    // 필터링된 마커 다시 추가
+    _addMarkers();
+  }
+
+  // 식당 로고 위젯 리스트 생성
+  List<Widget> _getRestaurantLogos(Map<String, dynamic> restaurant) {
+    List<Widget> logos = [];
+    final source = restaurant['source']?.toString() ?? '';
+    final michelinGrade = restaurant['michelin_grade']?.toString();
+
+    // 미슐랭 로고 (스타 또는 빕구르망)
+    if (source.contains('michelin') && michelinGrade != null) {
+      if (michelinGrade == 'bib_gourmand') {
+        logos.add(ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: Image.asset(
+            'assets/images/bib_gourmand_logo.png',
+            width: 32,
+            height: 32,
+          ),
+        ));
+      } else if (michelinGrade.startsWith('star_')) {
+        logos.add(ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: Image.asset(
+            'assets/images/michelin_logo.png',
+            width: 32,
+            height: 32,
+          ),
+        ));
+      }
+    }
+
+    // 부산의 맛 로고
+    if (source.contains('busan_mat')) {
+      logos.add(ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: Image.asset(
+          'assets/images/busan_mat_logo.png',
+          width: 32,
+          height: 32,
+        ),
+      ));
+    }
+
+    return logos;
   }
 
   // 식당 정보 다이얼로그 표시
   void _showRestaurantInfo(Map<String, dynamic> restaurant) {
+    final logos = _getRestaurantLogos(restaurant);
+
     showModalBottomSheet(
       context: context,
       builder: (context) => Container(
@@ -141,9 +226,23 @@ class _MapScreenState extends State<MapScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              restaurant['name'],
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    restaurant['name'],
+                    style: const TextStyle(
+                        fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                if (logos.isNotEmpty) ...[
+                  const SizedBox(width: 12),
+                  ...logos.map((logo) => Padding(
+                        padding: const EdgeInsets.only(left: 6),
+                        child: logo,
+                      )),
+                ],
+              ],
             ),
             const SizedBox(height: 8),
             Text(
@@ -168,7 +267,14 @@ class _MapScreenState extends State<MapScreen> {
                 onPressed: () {
                   _openNaverMap(restaurant);
                 },
-                icon: const Icon(Icons.map),
+                icon: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: Image.asset(
+                    'assets/images/naver_map_logo.png',
+                    width: 24,
+                    height: 24,
+                  ),
+                ),
                 label: const Text('네이버 지도에서 보기'),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.all(16),
@@ -234,7 +340,92 @@ class _MapScreenState extends State<MapScreen> {
               _addMarkers();
             },
           ),
+          // 상단 필터 버튼
+          Positioned(
+            top: safeAreaPadding.top + 10,
+            left: 10,
+            right: 10,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildFilterButton(
+                    label: '전체',
+                    isSelected: selectedSource == null,
+                    onPressed: () {
+                      setState(() {
+                        selectedSource = null;
+                      });
+                      _refreshMarkers();
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  _buildFilterButton(
+                    label: '미슐랭',
+                    iconPath: 'assets/images/michelin_logo.png',
+                    isSelected: selectedSource == 'michelin',
+                    onPressed: () {
+                      setState(() {
+                        selectedSource = 'michelin';
+                      });
+                      _refreshMarkers();
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  _buildFilterButton(
+                    label: '부산의 맛',
+                    iconPath: 'assets/images/busan_mat_logo.png',
+                    isSelected: selectedSource == 'busan_mat',
+                    onPressed: () {
+                      setState(() {
+                        selectedSource = 'busan_mat';
+                      });
+                      _refreshMarkers();
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
           if (isLoading) const Center(child: CircularProgressIndicator()),
+        ],
+      ),
+    );
+  }
+
+  // 필터 버튼 위젯
+  Widget _buildFilterButton({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onPressed,
+    String? iconPath,
+  }) {
+    return ElevatedButton(
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: isSelected ? Colors.green : Colors.white,
+        foregroundColor: isSelected ? Colors.white : Colors.black,
+        elevation: 4,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (iconPath != null) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: Image.asset(
+                iconPath,
+                width: 24,
+                height: 24,
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
         ],
       ),
     );
